@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http/httptest"
 	"os"
+	"path"
 	"sync"
 	"testing"
 )
@@ -164,5 +165,22 @@ func TestTools_UploadOneFile(t *testing.T) {
 			_ = os.Remove(fmt.Sprintf("./testdata/uploads/%s", uploadedFiles.NewFileName))
 
 		})
+	}
+}
+
+func TestTools_CreateDirIfNotExists(t *testing.T) {
+	var tt Tools
+
+	tempDir, err := os.MkdirTemp(".", "testdata-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		os.RemoveAll(tempDir)
+	}()
+
+	err = tt.CreateDirIfNotExist(path.Join(tempDir, "/myDir", "mySubdir"))
+	if err != nil {
+		t.Error(err)
 	}
 }
