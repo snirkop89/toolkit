@@ -184,3 +184,31 @@ func TestTools_CreateDirIfNotExists(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+func TestTools_Slugify(t *testing.T) {
+	tests := []struct {
+		name          string
+		s             string
+		expected      string
+		errorExpected bool
+	}{
+		{name: "valid string", s: "now is the time", expected: "now-is-the-time", errorExpected: false},
+		{name: "empty string", s: "", expected: "", errorExpected: true},
+		{name: "complex string", s: "Now is the time for all GOOD men! + fish & such &^123", expected: "now-is-the-time-for-all-good-men-fish-such-123", errorExpected: false},
+		{name: "japanese string", s: "こんにちは世界", expected: "", errorExpected: true},
+		{name: "japanese string and roman characters", s: "hello world こんにちは世界", expected: "hello-world", errorExpected: false},
+	}
+
+	var tt Tools
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			slug, err := tt.Slugify(tc.s)
+			if err != nil && !tc.errorExpected {
+				t.Errorf("%s: error received when none expected: %v", tc.name, err)
+			}
+			if !tc.errorExpected && slug != tc.expected {
+				t.Errorf("%s: wrong slung returned. expected %s, but got %s", tc.name, tc.expected, slug)
+			}
+		})
+	}
+}
