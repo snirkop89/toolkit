@@ -1,6 +1,9 @@
 package toolkit
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	"image/png"
@@ -15,6 +18,7 @@ import (
 )
 
 func TestTools_RandomString(t *testing.T) {
+	t.Parallel()
 	var tt Tools
 
 	s := tt.RandomString(10)
@@ -24,6 +28,7 @@ func TestTools_RandomString(t *testing.T) {
 }
 
 func TestTools_UploadFiles(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		allowedTypes  []string
@@ -102,6 +107,7 @@ func TestTools_UploadFiles(t *testing.T) {
 }
 
 func TestTools_UploadOneFile(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		allowedTypes  []string
@@ -170,6 +176,7 @@ func TestTools_UploadOneFile(t *testing.T) {
 }
 
 func TestTools_CreateDirIfNotExists(t *testing.T) {
+	t.Parallel()
 	var tt Tools
 
 	tempDir, err := os.MkdirTemp(".", "testdata-*")
@@ -187,6 +194,7 @@ func TestTools_CreateDirIfNotExists(t *testing.T) {
 }
 
 func TestTools_Slugify(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		s             string
@@ -215,6 +223,7 @@ func TestTools_Slugify(t *testing.T) {
 }
 
 func TestTools_DownloadStaticFile(t *testing.T) {
+	t.Parallel()
 	rr := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/download", nil)
 
@@ -235,5 +244,107 @@ func TestTools_DownloadStaticFile(t *testing.T) {
 	_, err := io.ReadAll(res.Body)
 	if err != nil {
 		t.Error(err)
+	}
+}
+
+// TODO: add check for the error message itself
+var jsonTests = []struct {
+	name          string
+	json          string
+	errorExpected bool
+	maxSize       int
+	allowUnknown  bool
+}{
+	{name: "good json", json: `{"foo": "bar"}`, errorExpected: false, maxSize: 1024, allowUnknown: false},
+	{name: "badly-formatted json", json: `{"foo": }`, errorExpected: true, maxSize: 1024, allowUnknown: false},
+	{name: "incorrect type", json: `{"foo": 1}`, errorExpected: true, maxSize: 1024, allowUnknown: false},
+	{name: "two json files", json: `{"foo": "1"}{"alpha": "beta"}`, errorExpected: true, maxSize: 1024, allowUnknown: false},
+	{name: "empty body", json: ``, errorExpected: true, maxSize: 1024, allowUnknown: false},
+	{name: "synatax error in json", json: `{"foo": 1"`, errorExpected: true, maxSize: 1024, allowUnknown: false},
+	{name: "unkown field in json", json: `{"foooo": "1"}`, errorExpected: true, maxSize: 1024, allowUnknown: false},
+	{name: "allow unkown fields in json", json: `{"foooo": "1"}`, errorExpected: false, maxSize: 1024, allowUnknown: true},
+	{name: "missing field name", json: `{jack: "1"}`, errorExpected: true, maxSize: 1024, allowUnknown: true},
+	{name: "file too large", json: `{"foo": "bar"}`, errorExpected: true, maxSize: 5, allowUnknown: true},
+	{name: "not json", json: `Hello, world!`, errorExpected: true, maxSize: 1024, allowUnknown: true},
+}
+
+func TestTools_ReadJSON(t *testing.T) {
+	t.Parallel()
+	var tt Tools
+
+	for _, tc := range jsonTests {
+		// set the max file size
+		tt.MaxJSONSize = tc.maxSize
+
+		// allow/disallow unknown fields
+		tt.AllowUnknownFields = tc.allowUnknown
+
+		// declare a var to read the decode json into
+		var decodedJSON struct {
+			Foo string `json:"foo"`
+		}
+
+		// create a request with the body
+		req, err := http.NewRequest("POST", "/", bytes.NewReader([]byte(tc.json)))
+		if err != nil {
+			t.Log("Error:", err)
+		}
+
+		rr := httptest.NewRecorder()
+
+		err = tt.ReadJSON(rr, req, &decodedJSON)
+		if tc.errorExpected && err == nil {
+			t.Errorf("%s: error expected, but none received", tc.name)
+		}
+
+		if !tc.errorExpected && err != nil {
+			t.Errorf("%s: error not expected but one recieved: %s", tc.name, err.Error())
+		}
+		req.Body.Close()
+
+	}
+}
+
+func TestTools_WriteJSON(t *testing.T) {
+	t.Parallel()
+	var tt Tools
+
+	rr := httptest.NewRecorder()
+	payload := JSONResponse{
+		Error:   false,
+		Message: "foo",
+	}
+
+	headers := make(http.Header)
+	headers.Add("FOO", "BAR")
+
+	err := tt.WriteJSON(rr, http.StatusOK, payload, headers)
+	if err != nil {
+		t.Fatal("failed to write json", err)
+	}
+
+}
+
+func TestTools_ErrorJSON(t *testing.T) {
+	t.Parallel()
+	var tt Tools
+	rr := httptest.NewRecorder()
+	err := tt.ErrorJSON(rr, errors.New("some error"), http.StatusInternalServerError)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var payload JSONResponse
+	err = json.NewDecoder(rr.Body).Decode(&payload)
+	if err != nil {
+		t.Fatal("error decoding json:", err)
+	}
+
+	if !payload.Error {
+		t.Error("error set to false in JSON, and it should be true")
+	}
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, rr.Code)
 	}
 }
