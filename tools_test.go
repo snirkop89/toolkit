@@ -17,6 +17,40 @@ import (
 	"testing"
 )
 
+type RoundTripFunc func(req *http.Request) *http.Response
+
+func (f RoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req), nil
+}
+
+func newTestClient(fn RoundTripFunc) *http.Client {
+	return &http.Client{
+		Transport: fn,
+	}
+}
+
+func TestTools_PushJSONToRemote(t *testing.T) {
+	client := newTestClient(func(req *http.Request) *http.Response {
+		// Test Request parameters
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString("ok")),
+			Header:     make(http.Header),
+		}
+	})
+
+	var tt Tools
+	var payload struct {
+		Bar string `json:"bar"`
+	}
+	payload.Bar = "foo"
+
+	_, _, err := tt.PushJSONToRemote("http://example.com/some-path", payload, client)
+	if err != nil {
+		t.Error("failed to call remote url:", err)
+	}
+}
+
 func TestTools_RandomString(t *testing.T) {
 	t.Parallel()
 	var tt Tools
