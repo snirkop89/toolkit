@@ -16,7 +16,9 @@ import (
 	"strings"
 )
 
-const randomStringSource = "abcdefghijklmnopqrstuvwyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890_+"
+const randomStringSource = "abcdefghijklmnopqrstuvwyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+const numbers = "0123456789"
+const specialChars = "_-!@#$%^&*()"
 
 // Tools  is the type used to instantiate this module.
 // Any variable of this type will have access to all the method with the receiver *Tools
@@ -27,11 +29,44 @@ type Tools struct {
 	AllowUnknownFields bool
 }
 
+var DigitsOnly = func() string {
+	return numbers
+}
+
+var CharactersOnly = func() string {
+	return randomStringSource
+}
+
+var WithSpecialChars = func() string {
+	return specialChars
+}
+
+var WithAll = func() string {
+	var source string
+	source += randomStringSource
+	source += numbers
+	source += specialChars
+
+	return source
+}
+
+type RandOption func() string
+
 // TODO: extend to support minimun numbers, minimum lower/upper cases, minimum symbols...
 // RandomString returns a string of random characters of length n, using randomStringSource
 // as the source for the string
-func (t *Tools) RandomString(n int) string {
-	s, r := make([]rune, n), []rune(randomStringSource)
+func (t *Tools) RandomString(n int, opts ...RandOption) string {
+	var source string
+
+	if len(opts) == 0 {
+		source = WithAll()
+	} else {
+		for _, opt := range opts {
+			source += opt()
+		}
+	}
+
+	s, r := make([]rune, n), []rune(source)
 	for i := range s {
 		p, _ := rand.Prime(rand.Reader, len(r))
 		x, y := p.Uint64(), uint64(len(r))
